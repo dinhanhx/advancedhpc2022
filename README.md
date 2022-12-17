@@ -12,5 +12,4 @@ Students are expected to:
 Student Info
 =======================
 
-* Name: MyName
-
+Name: Vu Dinh Anh - m21.ict.001
