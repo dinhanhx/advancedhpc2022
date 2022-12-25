@@ -2,21 +2,20 @@ import numpy as np
 import timeit
 import skimage.io as skio
 import math
-from tqdm.notebook import tqdm
 
 
 def conv2d(src, dst, k):
     k_h, k_w, = k.shape
     src_h, src_w, _ = src.shape
     for c in range(3):
-        for i in tqdm(range(src_h)):
-            for j in tqdm(range(src_w)):
+        for i in range(src_h):
+            for j in range(src_w):
                 temp = 0
                 for m in range(-(k_h//2), k_h//2 + 1):
                     for n in range(-(k_w//2), k_w//2 + 1):
                         if i + m >= 0 and j + n >= 0 and i + m < src_h and j + n < src_w:
-                            temp += np.uint8(np.float32(src[i+m, j+n, c]) * k[m + k_h // 2, n + k_w // 2])
-                dst[i, j, c] = np.uint8(temp / np.uint8(k_h))
+                            temp += np.float32(src[i+m, j+n, c]) * k[m + k_h // 2, n + k_w // 2]
+                dst[i, j, c] = temp
 
 # Gaussian Blur Kernel
 gbk = np.array([[0, 0, 1, 2, 1, 0, 0],
