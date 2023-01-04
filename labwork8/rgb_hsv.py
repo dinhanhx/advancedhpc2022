@@ -46,7 +46,7 @@ def hsv_to_rgb(src, dst):
     
     # preparation
     d = src[i, j, 0] / 60
-    hi = d % 6
+    hi = np.uint8(d % 6)
     f = d - hi
     l = src[i, j, 2] * (1 - src[i, j, 1])
     m = src[i, j, 2] * (1 - f * src[i, j, 1])
