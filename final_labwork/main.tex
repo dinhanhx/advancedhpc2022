@@ -1,15 +1,37 @@
-import numpy as np
-import timeit
-import skimage.io as skio
-from numba import cuda
-import math
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[a4paper, total={7in, 9in}]{geometry}
+\usepackage{minted}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usemintedstyle{manni}
 
-def dual_tuple_division(x, y):
-    return_tuple = []
-    for i, ii in zip(x, y):
-        return_tuple.append(math.ceil(ii/i))
-    return tuple(return_tuple)
+\title{HPC Final}
+\author{Vu Dinh Anh - m21.ict.001 }
+\date{January 2023}
 
+\begin{document}
+
+\maketitle
+
+\autoref{fig:original} and \autoref{fig:kuwahara} show the differences between before and after applying filter with window size of 8 (7 + 1 including the target pixel).
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[scale=0.2]{in.png}
+    \caption{Original image}
+    \label{fig:original}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[scale=0.2]{out.png}
+    \caption{Kuwahara filtered}
+    \label{fig:kuwahara}
+\end{figure}
+
+This code was copied from previous labwork probably 8.
+\begin{minted}{python}
 @cuda.jit
 def rgb_to_hsv(src, dst):
     i = cuda.threadIdx.x + cuda.blockIdx.x * cuda.blockDim.x
@@ -37,37 +59,12 @@ def rgb_to_hsv(src, dst):
         
     # v
     dst[i, j, 2] = max_c
-        
-    
-@cuda.jit
-def hsv_to_rgb(src, dst):
-    i = cuda.threadIdx.x + cuda.blockIdx.x * cuda.blockDim.x
-    j = cuda.threadIdx.y + cuda.blockIdx.y * cuda.blockDim.y
-    
-    # preparation
-    d = src[i, j, 0] / 60
-    hi = np.uint8(d % 6)
-    f = d - hi
-    l = src[i, j, 2] * (1 - src[i, j, 1])
-    m = src[i, j, 2] * (1 - f * src[i, j, 1])
-    n = src[i, j, 2] * (1 - (1 - f) * src[i, j, 1])
-    
-    # conversion
-    if np.float64(0) < src[i, j, 0] < np.float64(60):
-        dst[i, j, 0], dst[i, j, 1], dst[i, j, 2] = src[i, j, 2], n, l
-    if np.float64(60) <= src[i, j, 0] < np.float64(120):
-        dst[i, j, 0], dst[i, j, 1], dst[i, j, 2] = m, src[i, j, 2], l
-    if np.float64(120) <= src[i, j, 0] < np.float64(180):
-        dst[i, j, 0], dst[i, j, 1], dst[i, j, 2] = l, src[i, j, 2], n
-    if np.float64(180) <= src[i, j, 0] < np.float64(240):
-        dst[i, j, 0], dst[i, j, 1], dst[i, j, 2] = l, m, src[i, j, 2]
-    if np.float64(240) <= src[i, j, 0] < np.float64(300):
-        dst[i, j, 0], dst[i, j, 1], dst[i, j, 2] = n, l, src[i, j, 2]
-    if np.float64(300) <= src[i, j, 0] < np.float64(360):
-        dst[i, j, 0], dst[i, j, 1], dst[i, j, 2] = src[i, j, 2], l, m
+\end{minted}
 
+An end-to-end function is used to package and show the step. It's not much but honest work.
 
-def e2e_hsv_to_rgb(img_in):
+\begin{minted}{python}
+def e2e_rgb_to_hsv(img_in):
     img_in = np.array(img_in, copy=True)
     img_in = np.float64(img_in)
     img_in /= 255
@@ -85,7 +82,10 @@ def e2e_hsv_to_rgb(img_in):
     rgb_to_hsv[grid_size, block_size](cuda_img_in, cuda_hsv)
     hsv = cuda_hsv.copy_to_host()
     return hsv
+\end{minted}
 
+I implemented Kuwahara filter poorly. Each window's standard deviation is implemented manually. Then I find minimum standard deiviation. Laslty I check min std manually. It's not a good solution.
+\begin{minted}{python}
 @cuda.jit
 def kuwahara_filter(rgb_src, rgb_dst, v_arr, window_size):
     i = cuda.threadIdx.x + cuda.blockIdx.x * cuda.blockDim.x
@@ -95,8 +95,8 @@ def kuwahara_filter(rgb_src, rgb_dst, v_arr, window_size):
     # window 0
     sum_ = np.float64(0)
     sum_power_2 = np.float64(0)
-    for wi in range(i + 1 - window_size, i + 1):
-        for wj in range(j + 1 - window_size, j + 1):
+    for wi in range(i - window_size, i):
+        for wj in range(j - window_size, j):
             if wi >= 0 and wi < height and wj >= 0 and wj < width:
                 sum_ += v_arr[wi, wj]
                 sum_power_2 += v_arr[wi, wj] * v_arr[wi, wj]
@@ -108,7 +108,7 @@ def kuwahara_filter(rgb_src, rgb_dst, v_arr, window_size):
     sum_ = np.float64(0)
     sum_power_2 = np.float64(0)
     for wi in range(i, i + window_size):
-        for wj in range(j + 1 - window_size, j + 1):
+        for wj in range(j - window_size, j):
             if wi >= 0 and wi < height and wj >= 0 and wj < width:
                 sum_ += v_arr[wi, wj]
                 sum_power_2 += v_arr[wi, wj] * v_arr[wi, wj]
@@ -119,7 +119,7 @@ def kuwahara_filter(rgb_src, rgb_dst, v_arr, window_size):
     # window 2
     sum_ = np.float64(0)
     sum_power_2 = np.float64(0)
-    for wi in range(i + 1 - window_size, i + 1):
+    for wi in range(i - window_size, i):
         for wj in range(j, j + window_size):
             if wi >= 0 and wi < height and wj >= 0 and wj < width:
                 sum_ += v_arr[wi, wj]
@@ -144,35 +144,35 @@ def kuwahara_filter(rgb_src, rgb_dst, v_arr, window_size):
     min_std = min(std_window_0, std_window_1, std_window_2, std_window_3)
     
     # assign avg rgb of window to the target pixel
-    avg_r = np.uint16(0)
-    avg_g = np.uint16(0)
-    avg_b = np.uint16(0)
+    avg_r = np.float64(0.0)
+    avg_g = np.float64(0.0)
+    avg_b = np.float64(0.0)
     if min_std == std_window_0:
         # window 0
-        for wi in range(i + 1 - window_size, i + 1):
-            for wj in range(j + 1 - window_size, j + 1):
+        for wi in range(i- window_size, i):
+            for wj in range(j - window_size, j):
                 if wi >= 0 and wi < height and wj >= 0 and wj < width:
                     avg_r += rgb_src[wi, wj, 0]
                     avg_g += rgb_src[wi, wj, 1]
                     avg_b += rgb_src[wi, wj, 2]
                 
-    if min_std == std_window_1:
+    elif min_std == std_window_1:
         # window 1
         for wi in range(i, i + window_size):
-            for wj in range(j + 1 - window_size, j + 1):
+            for wj in range(j - window_size, j):
                 if wi >= 0 and wi < height and wj >= 0 and wj < width:
                     avg_r += rgb_src[wi, wj, 0]
                     avg_g += rgb_src[wi, wj, 1]
                     avg_b += rgb_src[wi, wj, 2]
-    if min_std == std_window_2:
+    elif min_std == std_window_2:
         # window 2
-        for wi in range(i + 1 - window_size, i + 1):
+        for wi in range(i - window_size, i):
             for wj in range(j, j + window_size):
                 if wi >= 0 and wi < height and wj >= 0 and wj < width:
                     avg_r += rgb_src[wi, wj, 0]
                     avg_g += rgb_src[wi, wj, 1]
                     avg_b += rgb_src[wi, wj, 2]
-    if min_std == std_window_3:
+    else:
         # window 3
         for wi in range(i, i + window_size):
             for wj in range(j, j + window_size):
@@ -189,28 +189,22 @@ def kuwahara_filter(rgb_src, rgb_dst, v_arr, window_size):
     rgb_dst[i, j, 1] = avg_g
     rgb_dst[i, j, 2] = avg_b
 
-# Do the thing
-# ============
-img = skio.imread('gura.png')[:, :, :3]
-img = np.ascontiguousarray(img)
-h, w, c = img.shape
-out = np.array(img, copy=True)
+\end{minted}
 
-hsv = e2e_hsv_to_rgb(img)
-v_arr = hsv[:, :, 2]
-v_arr = np.ascontiguousarray(v_arr)
+\subsection{Without shared memory}
+\begin{minted}{text}
+runtime @ block size
+0.00025529870006266717 @ (2, 2)
+0.00025514400001611646 @ (4, 4)
+0.00026532719998613176 @ (8, 8)
+0.00026966600003106576 @ (16, 16)
+0.00024621869999919 @ (32, 32)
+\end{minted}
+\subsection{With shared memory}
+I'm too tired and exhausted. Therefore, I haven't got time to implement this. Some ways are:
+\begin{itemize}
+    \item load rgb source image, or rgb destination image or the v channel of rgb-2-hsv converted image
+    \item the value of the v channel after raised power to 2
+\end{itemize}
 
-window_size = 4 # including the target pixel (3 + 1)
-
-# Configure Cuda blocks
-block_size = (32, 32)
-grid_size = dual_tuple_division(block_size, (h, w))
-
-# Move to Cuda device
-cuda_img = cuda.to_device(img)
-cuda_out = cuda.to_device(out)
-cuda_v_arr = cuda.to_device(v_arr)
-
-kuwahara_filter[grid_size, block_size](cuda_img, cuda_out, cuda_v_arr, window_size)
-out = cuda_out.copy_to_host()
-skio.imsave('out_gura.png', out)
+\end{document}
